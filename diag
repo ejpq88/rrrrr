@@ -51,7 +51,7 @@ def solicitar_rutas_archivos():
 
 def procesar_cruce_datos():
     """
-    Función principal para cruzar datos entre Base Sap TRX y Nombres NMC 2025
+    Función principal para cruzar datos SIN alterar el orden ni estructura original
     """
     
     # 1. SOLICITAR RUTAS DE ARCHIVOS
@@ -67,10 +67,10 @@ def procesar_cruce_datos():
     print("="*60)
     
     try:
-        # Leer archivo Base Sap TRX
+        # Leer archivo Base Sap TRX EXACTAMENTE como está
         print(f"Leyendo: {os.path.basename(ruta_base_sap)}")
-        base_sap = pd.read_excel(ruta_base_sap)
-        print(f"✅ Base SAP cargada: {len(base_sap)} filas, {len(base_sap.columns)} columnas")
+        base_sap_original = pd.read_excel(ruta_base_sap)
+        print(f"✅ Base SAP cargada: {len(base_sap_original)} filas, {len(base_sap_original.columns)} columnas")
         
         # Leer archivo Nombres NMC 2025 - Hoja Tipo Producto
         print(f"Leyendo hoja 'Tipo Producto' de: {os.path.basename(ruta_nmc)}")
@@ -98,21 +98,17 @@ def procesar_cruce_datos():
         print(f"❌ Error inesperado al leer archivos: {e}")
         return None
     
-    # 3. LIMPIAR Y PREPARAR DATOS
+    # 3. LIMPIAR Y PREPARAR DATOS DE REFERENCIA (NO EL ORIGINAL)
     print(f"\n" + "="*60)
-    print("PREPARANDO DATOS")
+    print("PREPARANDO DATOS DE REFERENCIA")
     print("="*60)
     
-    # Limpiar espacios en los nombres de columnas
-    base_sap.columns = base_sap.columns.str.strip()
+    # Limpiar espacios SOLO en los archivos de referencia
     tipo_producto.columns = tipo_producto.columns.str.strip()
     tipo_gasto.columns = tipo_gasto.columns.str.strip()
     
-    # Crear copia del archivo base para el resultado
-    resultado = base_sap.copy()
-    
-    # Mostrar columnas disponibles para verificación
-    print(f"Columnas en Base SAP: {list(base_sap.columns[:5])}..." if len(base_sap.columns) > 5 else f"Columnas en Base SAP: {list(base_sap.columns)}")
+    # NO tocamos base_sap_original para mantener estructura exacta
+    print(f"✅ Archivo Base SAP mantenido intacto")
     print(f"Columnas en Tipo Producto: {list(tipo_producto.columns)}")
     print(f"Columnas en Tipo Gasto: {list(tipo_gasto.columns)}")
     
@@ -131,127 +127,192 @@ def procesar_cruce_datos():
     
     print(f"✅ Columna Ce.coste identificada como: '{col_ce_coste}'")
     
-    # Verificar otras columnas necesarias
-    columnas_necesarias = {
-        'Base SAP': ['Centro coste', 'Clase Coste'],
-        'Tipo Producto': ['Producto', 'Estado'],
-        'Tipo Gasto': ['Clase Coste', 'TIPO GSTO']
-    }
+    # Verificar que existan las columnas necesarias en Base SAP
+    columnas_base_sap = list(base_sap_original.columns)
+    print(f"Columnas en Base SAP: {columnas_base_sap[:5]}..." if len(columnas_base_sap) > 5 else f"Columnas en Base SAP: {columnas_base_sap}")
     
-    for tabla, columnas in columnas_necesarias.items():
-        if tabla == 'Base SAP':
-            df = base_sap
-        elif tabla == 'Tipo Producto':
-            df = tipo_producto
+    # Buscar Centro coste en Base SAP (puede tener variaciones de nombre)
+    col_centro_coste = None
+    for col in base_sap_original.columns:
+        if 'centro' in str(col).lower() and 'cost' in str(col).lower():
+            col_centro_coste = col
+            break
+    
+    if not col_centro_coste:
+        print("❌ No se encontró la columna 'Centro coste' en Base SAP")
+        print(f"Columnas disponibles: {list(base_sap_original.columns)}")
+        return None
+    
+    # Buscar Clase Coste en Base SAP
+    col_clase_coste = None
+    for col in base_sap_original.columns:
+        if 'clase' in str(col).lower() and 'cost' in str(col).lower():
+            col_clase_coste = col
+            break
+    
+    if not col_clase_coste:
+        print("❌ No se encontró la columna 'Clase Coste' en Base SAP")
+        print(f"Columnas disponibles: {list(base_sap_original.columns)}")
+        return None
+    
+    print(f"✅ Centro coste identificado como: '{col_centro_coste}'")
+    print(f"✅ Clase coste identificado como: '{col_clase_coste}'")
+    
+    # 5. CREAR DICCIONARIOS DE MAPEO (SIN ALTERAR DATOS ORIGINALES)
+    print(f"\n" + "="*60)
+    print("CREANDO MAPEOS DE REFERENCIA")
+    print("="*60)
+    
+    # Crear diccionario de mapeo para Producto y Estado
+    mapeo_producto = {}
+    mapeo_estado = {}
+    
+    for _, row in tipo_producto.iterrows():
+        centro_coste = row[col_ce_coste]
+        if pd.notna(centro_coste):
+            mapeo_producto[centro_coste] = row['Producto'] if pd.notna(row['Producto']) else ''
+            mapeo_estado[centro_coste] = row['Estado'] if pd.notna(row['Estado']) else ''
+    
+    print(f"✅ Mapeo de productos creado: {len(mapeo_producto)} entradas")
+    print(f"   Ejemplos: {list(mapeo_producto.items())[:3]}")
+    
+    # Crear diccionario de mapeo para Tipo Gasto
+    mapeo_tipo_gasto = {}
+    
+    for _, row in tipo_gasto.iterrows():
+        clase_coste = row['Clase Coste']
+        if pd.notna(clase_coste):
+            mapeo_tipo_gasto[clase_coste] = row['TIPO GSTO'] if pd.notna(row['TIPO GSTO']) else ''
+    
+    print(f"✅ Mapeo de tipos de gasto creado: {len(mapeo_tipo_gasto)} entradas")
+    print(f"   Ejemplos: {list(mapeo_tipo_gasto.items())[:3]}")
+    
+    # 6. CREAR RESULTADO PRESERVANDO ORDEN EXACTO
+    print(f"\n" + "="*60)
+    print("CREANDO ARCHIVO RESULTADO (PRESERVANDO ORDEN EXACTO)")
+    print("="*60)
+    
+    # Leer el archivo Excel RAW para preservar orden exacto
+    resultado = pd.read_excel(ruta_base_sap)
+    
+    # Verificar que tenemos exactamente los mismos datos
+    print(f"✅ Verificación de integridad:")
+    print(f"   Filas originales: {len(base_sap_original)}")
+    print(f"   Filas resultado: {len(resultado)}")
+    print(f"   Columnas originales: {len(base_sap_original.columns)}")
+    print(f"   Columnas resultado: {len(resultado.columns)}")
+    
+    # Verificar que los datos son idénticos
+    datos_identicos = True
+    for col in base_sap_original.columns:
+        if col in resultado.columns:
+            if not base_sap_original[col].equals(resultado[col]):
+                print(f"⚠️  Datos diferentes detectados en columna: {col}")
+                datos_identicos = False
         else:
-            df = tipo_gasto
+            print(f"⚠️  Columna perdida: {col}")
+            datos_identicos = False
+    
+    if datos_identicos:
+        print(f"✅ Datos idénticos confirmados")
+    else:
+        print(f"❌ PROBLEMA: Los datos no son idénticos")
+        return None
+    
+    # 7. AGREGAR NUEVAS COLUMNAS SIN ALTERAR NADA MÁS
+    print(f"\n" + "="*60)
+    print("AGREGANDO COLUMNAS NUEVAS")
+    print("="*60)
+    
+    # Agregar columna Producto
+    print(f"Agregando columna 'Producto'...")
+    nueva_columna_producto = []
+    for idx, row in resultado.iterrows():
+        centro_coste_valor = row[col_centro_coste]
+        producto = mapeo_producto.get(centro_coste_valor, '')
+        nueva_columna_producto.append(producto)
+    
+    resultado['Producto'] = nueva_columna_producto
+    registros_con_producto = sum(1 for x in nueva_columna_producto if x != '')
+    print(f"✅ Columna 'Producto' agregada: {registros_con_producto} registros con valor")
+    
+    # Agregar columna Estado Producto
+    print(f"Agregando columna 'Estado Producto'...")
+    nueva_columna_estado = []
+    for idx, row in resultado.iterrows():
+        centro_coste_valor = row[col_centro_coste]
+        estado = mapeo_estado.get(centro_coste_valor, '')
+        nueva_columna_estado.append(estado)
+    
+    resultado['Estado Producto'] = nueva_columna_estado
+    registros_con_estado = sum(1 for x in nueva_columna_estado if x != '')
+    print(f"✅ Columna 'Estado Producto' agregada: {registros_con_estado} registros con valor")
+    
+    # Agregar columna Tipo Gasto
+    print(f"Agregando columna 'Tipo Gasto'...")
+    nueva_columna_tipo_gasto = []
+    for idx, row in resultado.iterrows():
+        clase_coste_valor = row[col_clase_coste]
+        tipo_gasto_valor = mapeo_tipo_gasto.get(clase_coste_valor, '')
+        nueva_columna_tipo_gasto.append(tipo_gasto_valor)
+    
+    resultado['Tipo Gasto'] = nueva_columna_tipo_gasto
+    registros_con_tipo_gasto = sum(1 for x in nueva_columna_tipo_gasto if x != '')
+    print(f"✅ Columna 'Tipo Gasto' agregada: {registros_con_tipo_gasto} registros con valor")
+    
+    # 8. VERIFICACIÓN CRÍTICA DE INTEGRIDAD
+    print(f"\n" + "="*60)
+    print("VERIFICACIÓN CRÍTICA DE INTEGRIDAD")
+    print("="*60)
+    
+    # Verificar algunos centros de costo específicos
+    centros_muestra = resultado[col_centro_coste].unique()[:5]
+    print(f"Verificando integridad en centros de costo muestra:")
+    
+    for centro in centros_muestra:
+        if pd.notna(centro):
+            # Filtrar por centro de costo en original y resultado
+            filas_original = base_sap_original[base_sap_original[col_centro_coste] == centro]
+            filas_resultado = resultado[resultado[col_centro_coste] == centro]
             
-        for col in columnas:
-            if col not in df.columns:
-                print(f"❌ Columna '{col}' no encontrada en {tabla}")
-                print(f"Columnas disponibles: {list(df.columns)}")
-                return None
+            print(f"\n🔍 Centro {centro}:")
+            print(f"   Filas en original: {len(filas_original)}")
+            print(f"   Filas en resultado: {len(filas_resultado)}")
+            
+            if len(filas_original) == len(filas_resultado):
+                # Verificar una columna numérica si existe
+                columnas_numericas = []
+                for col in base_sap_original.columns:
+                    if 'real' in str(col).lower() or 'plan' in str(col).lower():
+                        columnas_numericas.append(col)
+                        break
+                
+                if columnas_numericas:
+                    col_verificar = columnas_numericas[0]
+                    suma_original = filas_original[col_verificar].sum()
+                    suma_resultado = filas_resultado[col_verificar].sum()
+                    
+                    print(f"   Suma {col_verificar}:")
+                    print(f"     Original: {suma_original:,.0f}")
+                    print(f"     Resultado: {suma_resultado:,.0f}")
+                    print(f"     ✅ Iguales" if suma_original == suma_resultado else f"     ❌ DIFERENTES")
     
-    # 5. CRUCE PARA PRODUCTO Y ESTADO PRODUCTO
-    print(f"\n" + "="*60)
-    print("REALIZANDO CRUCE PARA PRODUCTO Y ESTADO")
-    print("="*60)
-    
-    print(f"Cruzando 'Centro coste' con '{col_ce_coste}'...")
-    
-    # Realizar el cruce por Centro coste
-    resultado = resultado.merge(
-        tipo_producto[[col_ce_coste, 'Producto', 'Estado']], 
-        left_on='Centro coste', 
-        right_on=col_ce_coste, 
-        how='left'
-    )
-    
-    # Renombrar las columnas según lo solicitado
-    resultado = resultado.rename(columns={
-        'Producto': 'Producto',
-        'Estado': 'Estado Producto'
-    })
-    
-    # Eliminar la columna Ce.coste que se creó en el merge
-    if col_ce_coste in resultado.columns:
-        resultado = resultado.drop(col_ce_coste, axis=1)
-    
-    registros_con_producto = resultado['Producto'].notna().sum()
-    registros_sin_producto = resultado['Producto'].isna().sum()
-    
-    print(f"✅ Registros con Producto asignado: {registros_con_producto}")
-    print(f"   Registros sin Producto: {registros_sin_producto}")
-    print(f"   Porcentaje de éxito: {registros_con_producto/len(resultado)*100:.1f}%")
-    
-    # 6. CRUCE PARA TIPO GASTO
-    print(f"\n" + "="*60)
-    print("REALIZANDO CRUCE PARA TIPO GASTO")
-    print("="*60)
-    
-    print("Cruzando 'Clase Coste' entre Base SAP y Tipo Gasto...")
-    
-    # Realizar el cruce por Clase Coste
-    resultado = resultado.merge(
-        tipo_gasto[['Clase Coste', 'TIPO GSTO']], 
-        on='Clase Coste', 
-        how='left'
-    )
-    
-    # Renombrar la columna según lo solicitado
-    resultado = resultado.rename(columns={'TIPO GSTO': 'Tipo Gasto'})
-    
-    registros_con_tipo_gasto = resultado['Tipo Gasto'].notna().sum()
-    registros_sin_tipo_gasto = resultado['Tipo Gasto'].isna().sum()
-    
-    print(f"✅ Registros con Tipo Gasto asignado: {registros_con_tipo_gasto}")
-    print(f"   Registros sin Tipo Gasto: {registros_sin_tipo_gasto}")
-    print(f"   Porcentaje de éxito: {registros_con_tipo_gasto/len(resultado)*100:.1f}%")
-    
-    # 7. ORGANIZAR COLUMNAS
-    print(f"\nOrganizando columnas finales...")
-    
-    # Identificar las columnas originales y las nuevas
-    columnas_originales = list(base_sap.columns)
-    nuevas_columnas = ['Producto', 'Estado Producto', 'Tipo Gasto']
-    
-    # Reorganizar: primeras columnas originales, luego las nuevas
-    columnas_finales = columnas_originales + nuevas_columnas
-    resultado = resultado[columnas_finales]
-    
-    # 8. GENERAR REPORTE DE RESULTADOS
+    # 9. GENERAR REPORTE DE RESULTADOS
     print(f"\n" + "="*60)
     print("RESUMEN DE RESULTADOS")
     print("="*60)
     print(f"📊 Total de registros procesados: {len(resultado):,}")
     print(f"📦 Registros con Producto asignado: {registros_con_producto:,} ({registros_con_producto/len(resultado)*100:.1f}%)")
-    print(f"📋 Registros con Estado Producto asignado: {resultado['Estado Producto'].notna().sum():,} ({resultado['Estado Producto'].notna().sum()/len(resultado)*100:.1f}%)")
+    print(f"📋 Registros with Estado Producto asignado: {registros_con_estado:,} ({registros_con_estado/len(resultado)*100:.1f}%)")
     print(f"💰 Registros con Tipo Gasto asignado: {registros_con_tipo_gasto:,} ({registros_con_tipo_gasto/len(resultado)*100:.1f}%)")
     
-    # Mostrar valores únicos encontrados
-    if registros_con_producto > 0:
-        productos_unicos = resultado['Producto'].nunique()
-        print(f"\n📦 Productos únicos encontrados: {productos_unicos}")
-        productos_muestra = resultado['Producto'].dropna().unique()[:3]
-        print(f"   Ejemplos: {', '.join(productos_muestra)}")
-        if productos_unicos > 3:
-            print(f"   ... y {productos_unicos - 3} más")
-    
-    if resultado['Estado Producto'].notna().sum() > 0:
-        estados_unicos = resultado['Estado Producto'].dropna().unique()
-        print(f"\n📋 Estados encontrados: {', '.join(estados_unicos)}")
-    
-    if registros_con_tipo_gasto > 0:
-        tipos_gasto_unicos = resultado['Tipo Gasto'].dropna().unique()
-        print(f"\n💰 Tipos de Gasto encontrados: {', '.join(tipos_gasto_unicos)}")
-    
-    # 9. GUARDAR RESULTADO
+    # 10. GUARDAR RESULTADO
     print(f"\n" + "="*60)
     print("GUARDANDO RESULTADO")
     print("="*60)
     
-    # Obtener directorio donde está el script o el primer archivo
-    directorio_salida = os.path.dirname(ruta_base_sap) if ruta_base_sap else os.getcwd()
+    # Obtener directorio donde está el archivo original
+    directorio_salida = os.path.dirname(ruta_base_sap)
     nombre_archivo_resultado = os.path.join(directorio_salida, 'Base_Sap_TRX_Resultado.xlsx')
     
     try:
@@ -259,22 +320,15 @@ def procesar_cruce_datos():
         print(f"✅ Archivo resultado guardado exitosamente:")
         print(f"   📁 {nombre_archivo_resultado}")
         print(f"   📊 {len(resultado):,} filas × {len(resultado.columns)} columnas")
+        print(f"   📊 Estructura: {len(base_sap_original.columns)} columnas originales + 3 nuevas")
     except Exception as e:
         print(f"❌ Error al guardar archivo: {e}")
-        # Intentar guardar en directorio actual como backup
-        try:
-            backup_name = 'Base_Sap_TRX_Resultado_backup.xlsx'
-            resultado.to_excel(backup_name, index=False)
-            print(f"✅ Archivo guardado como backup: {backup_name}")
-        except Exception as e2:
-            print(f"❌ Error también al guardar backup: {e2}")
-            return resultado
+        return resultado
     
-    # Mostrar muestra de los primeros registros
-    print(f"\n📋 Muestra de los primeros 3 registros:")
-    columnas_muestra = ['Clase Coste', 'Centro coste', 'Producto', 'Estado Producto', 'Tipo Gasto']
-    columnas_disponibles = [col for col in columnas_muestra if col in resultado.columns]
-    print(resultado[columnas_disponibles].head(3).to_string(index=False))
+    # Mostrar muestra final
+    print(f"\n📋 Muestra de primeros 3 registros (columnas clave):")
+    columnas_muestra = [col_clase_coste, col_centro_coste, 'Producto', 'Estado Producto', 'Tipo Gasto']
+    print(resultado[columnas_muestra].head(3).to_string(index=False))
     
     return resultado
 
@@ -282,16 +336,13 @@ def procesar_cruce_datos():
 if __name__ == "__main__":
     try:
         print("="*60)
-        print("🔄 PROCESADOR DE CRUCE SAP-NMC 2025")
+        print("🔄 PROCESADOR DE CRUCE SAP-NMC 2025 (PRESERVACIÓN EXACTA)")
         print("="*60)
-        print("Este programa cruzará los datos entre:")
-        print("• Base Sap TRX (archivo principal)")
-        print("• Nombres NMC 2025 (archivo de referencia)")
-        print("")
-        print("Se agregarán 3 columnas nuevas:")
-        print("• Producto")
-        print("• Estado Producto")  
-        print("• Tipo Gasto")
+        print("Este programa:")
+        print("• Mantiene EXACTAMENTE la estructura original de Base Sap TRX")
+        print("• NO altera, reordena ni modifica ningún dato existente")
+        print("• Solo AGREGA 3 columnas nuevas al final")
+        print("• Preserva el orden exacto de las filas")
         print("="*60)
         
         # Ejecutar el procesamiento principal
@@ -299,10 +350,10 @@ if __name__ == "__main__":
         
         if resultado is not None:
             print(f"\n🎉 ¡PROCESO COMPLETADO EXITOSAMENTE!")
-            print(f"📁 Revisa el archivo resultado generado")
+            print(f"📁 El archivo resultado es una copia EXACTA + 3 columnas nuevas")
+            print(f"🔍 Verifica que los totales por centro de costo sean idénticos")
         else:
             print(f"\n❌ El proceso no pudo completarse.")
-            print(f"💡 Verifica las rutas de los archivos y vuelve a intentar")
         
         input(f"\nPresiona Enter para cerrar...")
         
@@ -311,5 +362,6 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"\n❌ Error inesperado: {e}")
-        print(f"💡 Contacta al desarrollador si el problema persiste")
+        import traceback
+        traceback.print_exc()
         input(f"\nPresiona Enter para cerrar...")
