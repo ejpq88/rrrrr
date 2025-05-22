@@ -1,0 +1,175 @@
+import os
+import pandas as pd
+
+def diagnosticar_archivos():
+    """
+    Script para diagnosticar problemas con la ubicación de archivos
+    """
+    print("="*60)
+    print("DIAGNÓSTICO DE ARCHIVOS")
+    print("="*60)
+    
+    # 1. Mostrar directorio actual
+    directorio_actual = os.getcwd()
+    print(f"Directorio de trabajo actual: {directorio_actual}")
+    
+    # 2. Listar todos los archivos en el directorio
+    print(f"\nArchivos en el directorio actual:")
+    try:
+        archivos = os.listdir(directorio_actual)
+        for i, archivo in enumerate(archivos, 1):
+            print(f"{i:2d}. {archivo}")
+    except Exception as e:
+        print(f"Error al listar archivos: {e}")
+    
+    # 3. Buscar archivos Excel específicamente
+    print(f"\nArchivos Excel (.xlsx) encontrados:")
+    archivos_excel = [f for f in os.listdir(directorio_actual) if f.endswith('.xlsx')]
+    if archivos_excel:
+        for i, archivo in enumerate(archivos_excel, 1):
+            print(f"{i}. {archivo}")
+    else:
+        print("No se encontraron archivos .xlsx")
+    
+    # 4. Verificar archivos específicos que necesitamos
+    archivos_necesarios = ['Base Sap TRX.xlsx', 'Nombres NMC 2025.xlsx']
+    
+    print(f"\nVerificación de archivos necesarios:")
+    archivos_encontrados = {}
+    
+    for archivo in archivos_necesarios:
+        existe = os.path.exists(archivo)
+        archivos_encontrados[archivo] = existe
+        status = "✅ ENCONTRADO" if existe else "❌ NO ENCONTRADO"
+        print(f"{archivo}: {status}")
+        
+        if existe:
+            try:
+                # Intentar obtener información del archivo
+                info = os.stat(archivo)
+                print(f"   - Tamaño: {info.st_size:,} bytes")
+                print(f"   - Ruta completa: {os.path.abspath(archivo)}")
+            except Exception as e:
+                print(f"   - Error al acceder al archivo: {e}")
+    
+    # 5. Sugerir nombres alternativos si no se encuentran
+    print(f"\nBúsqueda de archivos con nombres similares:")
+    todos_archivos = os.listdir(directorio_actual)
+    
+    for archivo_necesario in archivos_necesarios:
+        if not archivos_encontrados[archivo_necesario]:
+            print(f"\nBuscando archivos similares a '{archivo_necesario}':")
+            # Buscar archivos que contengan palabras clave
+            palabras_clave = archivo_necesario.lower().replace('.xlsx', '').split()
+            archivos_similares = []
+            
+            for archivo_actual in todos_archivos:
+                if archivo_actual.endswith('.xlsx'):
+                    archivo_lower = archivo_actual.lower()
+                    coincidencias = sum(1 for palabra in palabras_clave if palabra in archivo_lower)
+                    if coincidencias > 0:
+                        archivos_similares.append((archivo_actual, coincidencias))
+            
+            # Ordenar por número de coincidencias
+            archivos_similares.sort(key=lambda x: x[1], reverse=True)
+            
+            if archivos_similares:
+                print("Archivos similares encontrados:")
+                for archivo_similar, coincidencias in archivos_similares[:3]:
+                    print(f"  - {archivo_similar} (coincidencias: {coincidencias})")
+            else:
+                print("No se encontraron archivos similares")
+    
+    # 6. Intentar leer archivos si existen
+    print(f"\n" + "="*60)
+    print("INTENTANDO LEER ARCHIVOS")
+    print("="*60)
+    
+    for archivo in archivos_necesarios:
+        if archivos_encontrados[archivo]:
+            print(f"\nIntentando leer: {archivo}")
+            try:
+                # Para Base Sap TRX
+                if "Base Sap" in archivo:
+                    df = pd.read_excel(archivo)
+                    print(f"✅ Archivo leído exitosamente")
+                    print(f"   - Filas: {len(df)}")
+                    print(f"   - Columnas: {len(df.columns)}")
+                    print(f"   - Primeras columnas: {list(df.columns[:5])}")
+                
+                # Para Nombres NMC
+                elif "NMC" in archivo:
+                    # Leer información de hojas
+                    xl_file = pd.ExcelFile(archivo)
+                    print(f"✅ Archivo leído exitosamente")
+                    print(f"   - Hojas disponibles: {xl_file.sheet_names}")
+                    
+                    for hoja in ['Tipo Producto', 'Tipo Gasto']:
+                        if hoja in xl_file.sheet_names:
+                            df_hoja = pd.read_excel(archivo, sheet_name=hoja)
+                            print(f"   - Hoja '{hoja}': {len(df_hoja)} filas, {len(df_hoja.columns)} columnas")
+                            print(f"     Columnas: {list(df_hoja.columns)}")
+                        else:
+                            print(f"   - ❌ Hoja '{hoja}' no encontrada")
+                            
+            except Exception as e:
+                print(f"❌ Error al leer el archivo: {e}")
+    
+    return archivos_encontrados
+
+def generar_codigo_corregido(archivos_encontrados):
+    """
+    Genera código corregido basado en los archivos encontrados
+    """
+    print(f"\n" + "="*60)
+    print("CÓDIGO SUGERIDO")
+    print("="*60)
+    
+    # Buscar archivos alternativos
+    directorio_actual = os.getcwd()
+    todos_archivos = [f for f in os.listdir(directorio_actual) if f.endswith('.xlsx')]
+    
+    archivo_base = None
+    archivo_nmc = None
+    
+    # Buscar archivo Base SAP
+    for archivo in todos_archivos:
+        if 'base' in archivo.lower() and 'sap' in archivo.lower():
+            archivo_base = archivo
+            break
+    
+    # Buscar archivo NMC
+    for archivo in todos_archivos:
+        if 'nmc' in archivo.lower() or 'nombre' in archivo.lower():
+            archivo_nmc = archivo
+            break
+    
+    if archivo_base and archivo_nmc:
+        print(f"Archivos detectados:")
+        print(f"- Base SAP: {archivo_base}")
+        print(f"- NMC: {archivo_nmc}")
+        print(f"\nCódigo sugerido para las primeras líneas:")
+        print(f"base_sap = pd.read_excel('{archivo_base}')")
+        print(f"tipo_producto = pd.read_excel('{archivo_nmc}', sheet_name='Tipo Producto')")
+        print(f"tipo_gasto = pd.read_excel('{archivo_nmc}', sheet_name='Tipo Gasto')")
+    else:
+        print("No se pudieron detectar automáticamente los archivos correctos.")
+        print("Por favor, verifica los nombres de archivo manualmente.")
+
+# EJECUTAR DIAGNÓSTICO
+if __name__ == "__main__":
+    try:
+        archivos_encontrados = diagnosticar_archivos()
+        generar_codigo_corregido(archivos_encontrados)
+        
+    except Exception as e:
+        print(f"Error durante el diagnóstico: {e}")
+        
+    print(f"\n" + "="*60)
+    print("RECOMENDACIONES:")
+    print("="*60)
+    print("1. Asegúrate de que los archivos estén en el mismo directorio que el script Python")
+    print("2. Verifica que los nombres de archivo sean exactamente iguales (incluyendo espacios)")
+    print("3. Si los nombres son diferentes, copia los nombres exactos de arriba")
+    print("4. Asegúrate de tener permisos de lectura en los archivos")
+    print("5. Si sigues teniendo problemas, intenta copiar los archivos a una nueva carpeta")
