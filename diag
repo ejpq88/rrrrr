@@ -1,175 +1,315 @@
-import os
 import pandas as pd
+import numpy as np
+import os
 
-def diagnosticar_archivos():
+def solicitar_rutas_archivos():
     """
-    Script para diagnosticar problemas con la ubicación de archivos
+    Solicita al usuario las rutas completas de los archivos necesarios
     """
     print("="*60)
-    print("DIAGNÓSTICO DE ARCHIVOS")
+    print("CONFIGURACIÓN DE ARCHIVOS")
     print("="*60)
     
-    # 1. Mostrar directorio actual
-    directorio_actual = os.getcwd()
-    print(f"Directorio de trabajo actual: {directorio_actual}")
+    print("Por favor, proporciona las rutas completas de los archivos:")
+    print("(Puedes arrastrar y soltar los archivos en la terminal, o copiar la ruta completa)")
     
-    # 2. Listar todos los archivos en el directorio
-    print(f"\nArchivos en el directorio actual:")
-    try:
-        archivos = os.listdir(directorio_actual)
-        for i, archivo in enumerate(archivos, 1):
-            print(f"{i:2d}. {archivo}")
-    except Exception as e:
-        print(f"Error al listar archivos: {e}")
-    
-    # 3. Buscar archivos Excel específicamente
-    print(f"\nArchivos Excel (.xlsx) encontrados:")
-    archivos_excel = [f for f in os.listdir(directorio_actual) if f.endswith('.xlsx')]
-    if archivos_excel:
-        for i, archivo in enumerate(archivos_excel, 1):
-            print(f"{i}. {archivo}")
-    else:
-        print("No se encontraron archivos .xlsx")
-    
-    # 4. Verificar archivos específicos que necesitamos
-    archivos_necesarios = ['Base Sap TRX.xlsx', 'Nombres NMC 2025.xlsx']
-    
-    print(f"\nVerificación de archivos necesarios:")
-    archivos_encontrados = {}
-    
-    for archivo in archivos_necesarios:
-        existe = os.path.exists(archivo)
-        archivos_encontrados[archivo] = existe
-        status = "✅ ENCONTRADO" if existe else "❌ NO ENCONTRADO"
-        print(f"{archivo}: {status}")
+    # Solicitar archivo Base SAP TRX
+    while True:
+        print(f"\n1. ARCHIVO BASE SAP TRX")
+        print("   Ejemplo: C:\\Users\\tu_usuario\\Documents\\Base Sap TRX.xlsx")
+        ruta_base_sap = input("   Ruta completa del archivo Base SAP TRX: ").strip().replace('"', '')
         
-        if existe:
-            try:
-                # Intentar obtener información del archivo
-                info = os.stat(archivo)
-                print(f"   - Tamaño: {info.st_size:,} bytes")
-                print(f"   - Ruta completa: {os.path.abspath(archivo)}")
-            except Exception as e:
-                print(f"   - Error al acceder al archivo: {e}")
-    
-    # 5. Sugerir nombres alternativos si no se encuentran
-    print(f"\nBúsqueda de archivos con nombres similares:")
-    todos_archivos = os.listdir(directorio_actual)
-    
-    for archivo_necesario in archivos_necesarios:
-        if not archivos_encontrados[archivo_necesario]:
-            print(f"\nBuscando archivos similares a '{archivo_necesario}':")
-            # Buscar archivos que contengan palabras clave
-            palabras_clave = archivo_necesario.lower().replace('.xlsx', '').split()
-            archivos_similares = []
+        if os.path.exists(ruta_base_sap):
+            print(f"   ✅ Archivo encontrado: {os.path.basename(ruta_base_sap)}")
+            break
+        else:
+            print(f"   ❌ Archivo no encontrado en: {ruta_base_sap}")
+            print("   Verifica la ruta e intenta nuevamente")
             
-            for archivo_actual in todos_archivos:
-                if archivo_actual.endswith('.xlsx'):
-                    archivo_lower = archivo_actual.lower()
-                    coincidencias = sum(1 for palabra in palabras_clave if palabra in archivo_lower)
-                    if coincidencias > 0:
-                        archivos_similares.append((archivo_actual, coincidencias))
-            
-            # Ordenar por número de coincidencias
-            archivos_similares.sort(key=lambda x: x[1], reverse=True)
-            
-            if archivos_similares:
-                print("Archivos similares encontrados:")
-                for archivo_similar, coincidencias in archivos_similares[:3]:
-                    print(f"  - {archivo_similar} (coincidencias: {coincidencias})")
-            else:
-                print("No se encontraron archivos similares")
+            respuesta = input("   ¿Deseas intentar otra ruta? (s/n): ").lower()
+            if respuesta != 's':
+                return None, None
     
-    # 6. Intentar leer archivos si existen
+    # Solicitar archivo Nombres NMC 2025
+    while True:
+        print(f"\n2. ARCHIVO NOMBRES NMC 2025")
+        print("   Ejemplo: C:\\Users\\tu_usuario\\Documents\\Nombres NMC 2025.xlsx")
+        ruta_nmc = input("   Ruta completa del archivo Nombres NMC 2025: ").strip().replace('"', '')
+        
+        if os.path.exists(ruta_nmc):
+            print(f"   ✅ Archivo encontrado: {os.path.basename(ruta_nmc)}")
+            break
+        else:
+            print(f"   ❌ Archivo no encontrado en: {ruta_nmc}")
+            print("   Verifica la ruta e intenta nuevamente")
+            
+            respuesta = input("   ¿Deseas intentar otra ruta? (s/n): ").lower()
+            if respuesta != 's':
+                return None, None
+    
+    return ruta_base_sap, ruta_nmc
+
+def procesar_cruce_datos():
+    """
+    Función principal para cruzar datos entre Base Sap TRX y Nombres NMC 2025
+    """
+    
+    # 1. SOLICITAR RUTAS DE ARCHIVOS
+    ruta_base_sap, ruta_nmc = solicitar_rutas_archivos()
+    
+    if not ruta_base_sap or not ruta_nmc:
+        print("❌ No se pudieron obtener las rutas de los archivos. Terminando programa.")
+        return None
+    
+    # 2. LEER ARCHIVOS
     print(f"\n" + "="*60)
-    print("INTENTANDO LEER ARCHIVOS")
+    print("LEYENDO ARCHIVOS")
     print("="*60)
     
-    for archivo in archivos_necesarios:
-        if archivos_encontrados[archivo]:
-            print(f"\nIntentando leer: {archivo}")
-            try:
-                # Para Base Sap TRX
-                if "Base Sap" in archivo:
-                    df = pd.read_excel(archivo)
-                    print(f"✅ Archivo leído exitosamente")
-                    print(f"   - Filas: {len(df)}")
-                    print(f"   - Columnas: {len(df.columns)}")
-                    print(f"   - Primeras columnas: {list(df.columns[:5])}")
-                
-                # Para Nombres NMC
-                elif "NMC" in archivo:
-                    # Leer información de hojas
-                    xl_file = pd.ExcelFile(archivo)
-                    print(f"✅ Archivo leído exitosamente")
-                    print(f"   - Hojas disponibles: {xl_file.sheet_names}")
-                    
-                    for hoja in ['Tipo Producto', 'Tipo Gasto']:
-                        if hoja in xl_file.sheet_names:
-                            df_hoja = pd.read_excel(archivo, sheet_name=hoja)
-                            print(f"   - Hoja '{hoja}': {len(df_hoja)} filas, {len(df_hoja.columns)} columnas")
-                            print(f"     Columnas: {list(df_hoja.columns)}")
-                        else:
-                            print(f"   - ❌ Hoja '{hoja}' no encontrada")
-                            
-            except Exception as e:
-                print(f"❌ Error al leer el archivo: {e}")
+    try:
+        # Leer archivo Base Sap TRX
+        print(f"Leyendo: {os.path.basename(ruta_base_sap)}")
+        base_sap = pd.read_excel(ruta_base_sap)
+        print(f"✅ Base SAP cargada: {len(base_sap)} filas, {len(base_sap.columns)} columnas")
+        
+        # Leer archivo Nombres NMC 2025 - Hoja Tipo Producto
+        print(f"Leyendo hoja 'Tipo Producto' de: {os.path.basename(ruta_nmc)}")
+        tipo_producto = pd.read_excel(ruta_nmc, sheet_name='Tipo Producto')
+        print(f"✅ Tipo Producto cargado: {len(tipo_producto)} filas, {len(tipo_producto.columns)} columnas")
+        
+        # Leer archivo Nombres NMC 2025 - Hoja Tipo Gasto
+        print(f"Leyendo hoja 'Tipo Gasto' de: {os.path.basename(ruta_nmc)}")
+        tipo_gasto = pd.read_excel(ruta_nmc, sheet_name='Tipo Gasto')
+        print(f"✅ Tipo Gasto cargado: {len(tipo_gasto)} filas, {len(tipo_gasto.columns)} columnas")
+        
+    except FileNotFoundError as e:
+        print(f"❌ Error: Archivo no encontrado - {e}")
+        return None
+    except ValueError as e:
+        print(f"❌ Error: Problema con las hojas del archivo - {e}")
+        print("Verificando hojas disponibles...")
+        try:
+            xl_file = pd.ExcelFile(ruta_nmc)
+            print(f"Hojas disponibles: {xl_file.sheet_names}")
+        except:
+            pass
+        return None
+    except Exception as e:
+        print(f"❌ Error inesperado al leer archivos: {e}")
+        return None
     
-    return archivos_encontrados
-
-def generar_codigo_corregido(archivos_encontrados):
-    """
-    Genera código corregido basado en los archivos encontrados
-    """
+    # 3. LIMPIAR Y PREPARAR DATOS
     print(f"\n" + "="*60)
-    print("CÓDIGO SUGERIDO")
+    print("PREPARANDO DATOS")
     print("="*60)
     
-    # Buscar archivos alternativos
-    directorio_actual = os.getcwd()
-    todos_archivos = [f for f in os.listdir(directorio_actual) if f.endswith('.xlsx')]
+    # Limpiar espacios en los nombres de columnas
+    base_sap.columns = base_sap.columns.str.strip()
+    tipo_producto.columns = tipo_producto.columns.str.strip()
+    tipo_gasto.columns = tipo_gasto.columns.str.strip()
     
-    archivo_base = None
-    archivo_nmc = None
+    # Crear copia del archivo base para el resultado
+    resultado = base_sap.copy()
     
-    # Buscar archivo Base SAP
-    for archivo in todos_archivos:
-        if 'base' in archivo.lower() and 'sap' in archivo.lower():
-            archivo_base = archivo
+    # Mostrar columnas disponibles para verificación
+    print(f"Columnas en Base SAP: {list(base_sap.columns[:5])}..." if len(base_sap.columns) > 5 else f"Columnas en Base SAP: {list(base_sap.columns)}")
+    print(f"Columnas en Tipo Producto: {list(tipo_producto.columns)}")
+    print(f"Columnas en Tipo Gasto: {list(tipo_gasto.columns)}")
+    
+    # 4. VERIFICAR COLUMNAS NECESARIAS
+    # Buscar la columna Ce.coste (puede tener espacios)
+    col_ce_coste = None
+    for col in tipo_producto.columns:
+        if 'ce.coste' in col.lower().replace(' ', ''):
+            col_ce_coste = col
             break
     
-    # Buscar archivo NMC
-    for archivo in todos_archivos:
-        if 'nmc' in archivo.lower() or 'nombre' in archivo.lower():
-            archivo_nmc = archivo
-            break
+    if not col_ce_coste:
+        print("❌ No se encontró la columna 'Ce.coste' en Tipo Producto")
+        print(f"Columnas disponibles: {list(tipo_producto.columns)}")
+        return None
     
-    if archivo_base and archivo_nmc:
-        print(f"Archivos detectados:")
-        print(f"- Base SAP: {archivo_base}")
-        print(f"- NMC: {archivo_nmc}")
-        print(f"\nCódigo sugerido para las primeras líneas:")
-        print(f"base_sap = pd.read_excel('{archivo_base}')")
-        print(f"tipo_producto = pd.read_excel('{archivo_nmc}', sheet_name='Tipo Producto')")
-        print(f"tipo_gasto = pd.read_excel('{archivo_nmc}', sheet_name='Tipo Gasto')")
-    else:
-        print("No se pudieron detectar automáticamente los archivos correctos.")
-        print("Por favor, verifica los nombres de archivo manualmente.")
+    print(f"✅ Columna Ce.coste identificada como: '{col_ce_coste}'")
+    
+    # Verificar otras columnas necesarias
+    columnas_necesarias = {
+        'Base SAP': ['Centro coste', 'Clase Coste'],
+        'Tipo Producto': ['Producto', 'Estado'],
+        'Tipo Gasto': ['Clase Coste', 'TIPO GSTO']
+    }
+    
+    for tabla, columnas in columnas_necesarias.items():
+        if tabla == 'Base SAP':
+            df = base_sap
+        elif tabla == 'Tipo Producto':
+            df = tipo_producto
+        else:
+            df = tipo_gasto
+            
+        for col in columnas:
+            if col not in df.columns:
+                print(f"❌ Columna '{col}' no encontrada en {tabla}")
+                print(f"Columnas disponibles: {list(df.columns)}")
+                return None
+    
+    # 5. CRUCE PARA PRODUCTO Y ESTADO PRODUCTO
+    print(f"\n" + "="*60)
+    print("REALIZANDO CRUCE PARA PRODUCTO Y ESTADO")
+    print("="*60)
+    
+    print(f"Cruzando 'Centro coste' con '{col_ce_coste}'...")
+    
+    # Realizar el cruce por Centro coste
+    resultado = resultado.merge(
+        tipo_producto[[col_ce_coste, 'Producto', 'Estado']], 
+        left_on='Centro coste', 
+        right_on=col_ce_coste, 
+        how='left'
+    )
+    
+    # Renombrar las columnas según lo solicitado
+    resultado = resultado.rename(columns={
+        'Producto': 'Producto',
+        'Estado': 'Estado Producto'
+    })
+    
+    # Eliminar la columna Ce.coste que se creó en el merge
+    if col_ce_coste in resultado.columns:
+        resultado = resultado.drop(col_ce_coste, axis=1)
+    
+    registros_con_producto = resultado['Producto'].notna().sum()
+    registros_sin_producto = resultado['Producto'].isna().sum()
+    
+    print(f"✅ Registros con Producto asignado: {registros_con_producto}")
+    print(f"   Registros sin Producto: {registros_sin_producto}")
+    print(f"   Porcentaje de éxito: {registros_con_producto/len(resultado)*100:.1f}%")
+    
+    # 6. CRUCE PARA TIPO GASTO
+    print(f"\n" + "="*60)
+    print("REALIZANDO CRUCE PARA TIPO GASTO")
+    print("="*60)
+    
+    print("Cruzando 'Clase Coste' entre Base SAP y Tipo Gasto...")
+    
+    # Realizar el cruce por Clase Coste
+    resultado = resultado.merge(
+        tipo_gasto[['Clase Coste', 'TIPO GSTO']], 
+        on='Clase Coste', 
+        how='left'
+    )
+    
+    # Renombrar la columna según lo solicitado
+    resultado = resultado.rename(columns={'TIPO GSTO': 'Tipo Gasto'})
+    
+    registros_con_tipo_gasto = resultado['Tipo Gasto'].notna().sum()
+    registros_sin_tipo_gasto = resultado['Tipo Gasto'].isna().sum()
+    
+    print(f"✅ Registros con Tipo Gasto asignado: {registros_con_tipo_gasto}")
+    print(f"   Registros sin Tipo Gasto: {registros_sin_tipo_gasto}")
+    print(f"   Porcentaje de éxito: {registros_con_tipo_gasto/len(resultado)*100:.1f}%")
+    
+    # 7. ORGANIZAR COLUMNAS
+    print(f"\nOrganizando columnas finales...")
+    
+    # Identificar las columnas originales y las nuevas
+    columnas_originales = list(base_sap.columns)
+    nuevas_columnas = ['Producto', 'Estado Producto', 'Tipo Gasto']
+    
+    # Reorganizar: primeras columnas originales, luego las nuevas
+    columnas_finales = columnas_originales + nuevas_columnas
+    resultado = resultado[columnas_finales]
+    
+    # 8. GENERAR REPORTE DE RESULTADOS
+    print(f"\n" + "="*60)
+    print("RESUMEN DE RESULTADOS")
+    print("="*60)
+    print(f"📊 Total de registros procesados: {len(resultado):,}")
+    print(f"📦 Registros con Producto asignado: {registros_con_producto:,} ({registros_con_producto/len(resultado)*100:.1f}%)")
+    print(f"📋 Registros con Estado Producto asignado: {resultado['Estado Producto'].notna().sum():,} ({resultado['Estado Producto'].notna().sum()/len(resultado)*100:.1f}%)")
+    print(f"💰 Registros con Tipo Gasto asignado: {registros_con_tipo_gasto:,} ({registros_con_tipo_gasto/len(resultado)*100:.1f}%)")
+    
+    # Mostrar valores únicos encontrados
+    if registros_con_producto > 0:
+        productos_unicos = resultado['Producto'].nunique()
+        print(f"\n📦 Productos únicos encontrados: {productos_unicos}")
+        productos_muestra = resultado['Producto'].dropna().unique()[:3]
+        print(f"   Ejemplos: {', '.join(productos_muestra)}")
+        if productos_unicos > 3:
+            print(f"   ... y {productos_unicos - 3} más")
+    
+    if resultado['Estado Producto'].notna().sum() > 0:
+        estados_unicos = resultado['Estado Producto'].dropna().unique()
+        print(f"\n📋 Estados encontrados: {', '.join(estados_unicos)}")
+    
+    if registros_con_tipo_gasto > 0:
+        tipos_gasto_unicos = resultado['Tipo Gasto'].dropna().unique()
+        print(f"\n💰 Tipos de Gasto encontrados: {', '.join(tipos_gasto_unicos)}")
+    
+    # 9. GUARDAR RESULTADO
+    print(f"\n" + "="*60)
+    print("GUARDANDO RESULTADO")
+    print("="*60)
+    
+    # Obtener directorio donde está el script o el primer archivo
+    directorio_salida = os.path.dirname(ruta_base_sap) if ruta_base_sap else os.getcwd()
+    nombre_archivo_resultado = os.path.join(directorio_salida, 'Base_Sap_TRX_Resultado.xlsx')
+    
+    try:
+        resultado.to_excel(nombre_archivo_resultado, index=False)
+        print(f"✅ Archivo resultado guardado exitosamente:")
+        print(f"   📁 {nombre_archivo_resultado}")
+        print(f"   📊 {len(resultado):,} filas × {len(resultado.columns)} columnas")
+    except Exception as e:
+        print(f"❌ Error al guardar archivo: {e}")
+        # Intentar guardar en directorio actual como backup
+        try:
+            backup_name = 'Base_Sap_TRX_Resultado_backup.xlsx'
+            resultado.to_excel(backup_name, index=False)
+            print(f"✅ Archivo guardado como backup: {backup_name}")
+        except Exception as e2:
+            print(f"❌ Error también al guardar backup: {e2}")
+            return resultado
+    
+    # Mostrar muestra de los primeros registros
+    print(f"\n📋 Muestra de los primeros 3 registros:")
+    columnas_muestra = ['Clase Coste', 'Centro coste', 'Producto', 'Estado Producto', 'Tipo Gasto']
+    columnas_disponibles = [col for col in columnas_muestra if col in resultado.columns]
+    print(resultado[columnas_disponibles].head(3).to_string(index=False))
+    
+    return resultado
 
-# EJECUTAR DIAGNÓSTICO
+# EJECUTAR EL PROCESO
 if __name__ == "__main__":
     try:
-        archivos_encontrados = diagnosticar_archivos()
-        generar_codigo_corregido(archivos_encontrados)
+        print("="*60)
+        print("🔄 PROCESADOR DE CRUCE SAP-NMC 2025")
+        print("="*60)
+        print("Este programa cruzará los datos entre:")
+        print("• Base Sap TRX (archivo principal)")
+        print("• Nombres NMC 2025 (archivo de referencia)")
+        print("")
+        print("Se agregarán 3 columnas nuevas:")
+        print("• Producto")
+        print("• Estado Producto")  
+        print("• Tipo Gasto")
+        print("="*60)
+        
+        # Ejecutar el procesamiento principal
+        resultado = procesar_cruce_datos()
+        
+        if resultado is not None:
+            print(f"\n🎉 ¡PROCESO COMPLETADO EXITOSAMENTE!")
+            print(f"📁 Revisa el archivo resultado generado")
+        else:
+            print(f"\n❌ El proceso no pudo completarse.")
+            print(f"💡 Verifica las rutas de los archivos y vuelve a intentar")
+        
+        input(f"\nPresiona Enter para cerrar...")
+        
+    except KeyboardInterrupt:
+        print(f"\n\n⏹️ Proceso cancelado por el usuario")
         
     except Exception as e:
-        print(f"Error durante el diagnóstico: {e}")
-        
-    print(f"\n" + "="*60)
-    print("RECOMENDACIONES:")
-    print("="*60)
-    print("1. Asegúrate de que los archivos estén en el mismo directorio que el script Python")
-    print("2. Verifica que los nombres de archivo sean exactamente iguales (incluyendo espacios)")
-    print("3. Si los nombres son diferentes, copia los nombres exactos de arriba")
-    print("4. Asegúrate de tener permisos de lectura en los archivos")
-    print("5. Si sigues teniendo problemas, intenta copiar los archivos a una nueva carpeta")
+        print(f"\n❌ Error inesperado: {e}")
+        print(f"💡 Contacta al desarrollador si el problema persiste")
+        input(f"\nPresiona Enter para cerrar...")
