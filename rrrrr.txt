@@ -1,0 +1,171 @@
+import pandas as pd
+import numpy as np
+
+def procesar_cruce_datos():
+    """
+    Función principal para cruzar datos entre Base Sap TRX y Nombres NMC 2025
+    """
+    
+    # 1. LEER ARCHIVOS
+    print("Leyendo archivos...")
+    
+    # Leer archivo Base Sap TRX
+    base_sap = pd.read_excel('Base Sap TRX.xlsx')
+    print(f"Base SAP cargada: {len(base_sap)} filas")
+    
+    # Leer archivo Nombres NMC 2025 - Hoja Tipo Producto
+    tipo_producto = pd.read_excel('Nombres NMC 2025.xlsx', sheet_name='Tipo Producto')
+    print(f"Tipo Producto cargado: {len(tipo_producto)} filas")
+    
+    # Leer archivo Nombres NMC 2025 - Hoja Tipo Gasto
+    tipo_gasto = pd.read_excel('Nombres NMC 2025.xlsx', sheet_name='Tipo Gasto')
+    print(f"Tipo Gasto cargado: {len(tipo_gasto)} filas")
+    
+    # 2. LIMPIAR Y PREPARAR DATOS
+    print("\nPreparando datos...")
+    
+    # Limpiar espacios en los nombres de columnas
+    base_sap.columns = base_sap.columns.str.strip()
+    tipo_producto.columns = tipo_producto.columns.str.strip()
+    tipo_gasto.columns = tipo_gasto.columns.str.strip()
+    
+    # Crear copia del archivo base para el resultado
+    resultado = base_sap.copy()
+    
+    # Mostrar columnas disponibles para verificación
+    print(f"\nColumnas en Base SAP: {list(base_sap.columns)}")
+    print(f"Columnas en Tipo Producto: {list(tipo_producto.columns)}")
+    print(f"Columnas en Tipo Gasto: {list(tipo_gasto.columns)}")
+    
+    # 3. CRUCE PARA PRODUCTO Y ESTADO PRODUCTO
+    print("\nRealizando cruce para Producto y Estado Producto...")
+    
+    # Renombrar la columna de centro de costo en tipo_producto para el merge
+    # La columna se llama " Ce.coste" (con espacio al inicio)
+    tipo_producto_clean = tipo_producto.rename(columns={' Ce.coste': 'Ce.coste'})
+    
+    # Realizar el cruce por Centro coste
+    resultado = resultado.merge(
+        tipo_producto_clean[['Ce.coste', 'Producto', 'Estado']], 
+        left_on='Centro coste', 
+        right_on='Ce.coste', 
+        how='left'
+    )
+    
+    # Renombrar las columnas según lo solicitado
+    resultado = resultado.rename(columns={
+        'Producto': 'Producto',
+        'Estado': 'Estado Producto'
+    })
+    
+    # Eliminar la columna Ce.coste que se creó en el merge
+    if 'Ce.coste' in resultado.columns:
+        resultado = resultado.drop('Ce.coste', axis=1)
+    
+    print(f"Registros con Producto asignado: {resultado['Producto'].notna().sum()}")
+    print(f"Registros sin Producto: {resultado['Producto'].isna().sum()}")
+    
+    # 4. CRUCE PARA TIPO GASTO
+    print("\nRealizando cruce para Tipo Gasto...")
+    
+    # Realizar el cruce por Clase Coste
+    resultado = resultado.merge(
+        tipo_gasto[['Clase Coste', 'TIPO GSTO']], 
+        on='Clase Coste', 
+        how='left'
+    )
+    
+    # Renombrar la columna según lo solicitado
+    resultado = resultado.rename(columns={'TIPO GSTO': 'Tipo Gasto'})
+    
+    print(f"Registros con Tipo Gasto asignado: {resultado['Tipo Gasto'].notna().sum()}")
+    print(f"Registros sin Tipo Gasto: {resultado['Tipo Gasto'].isna().sum()}")
+    
+    # 5. ORGANIZAR COLUMNAS
+    print("\nOrganizando columnas finales...")
+    
+    # Identificar las columnas originales y las nuevas
+    columnas_originales = list(base_sap.columns)
+    nuevas_columnas = ['Producto', 'Estado Producto', 'Tipo Gasto']
+    
+    # Reorganizar: primeras columnas originales, luego las nuevas
+    columnas_finales = columnas_originales + nuevas_columnas
+    resultado = resultado[columnas_finales]
+    
+    # 6. GENERAR REPORTE DE RESULTADOS
+    print("\n" + "="*50)
+    print("RESUMEN DE RESULTADOS")
+    print("="*50)
+    print(f"Total de registros procesados: {len(resultado)}")
+    print(f"Registros con Producto asignado: {resultado['Producto'].notna().sum()} ({resultado['Producto'].notna().sum()/len(resultado)*100:.1f}%)")
+    print(f"Registros con Estado Producto asignado: {resultado['Estado Producto'].notna().sum()} ({resultado['Estado Producto'].notna().sum()/len(resultado)*100:.1f}%)")
+    print(f"Registros con Tipo Gasto asignado: {resultado['Tipo Gasto'].notna().sum()} ({resultado['Tipo Gasto'].notna().sum()/len(resultado)*100:.1f}%)")
+    
+    # Mostrar valores únicos encontrados
+    print(f"\nProductos únicos encontrados: {resultado['Producto'].nunique()}")
+    print("Productos:", resultado['Producto'].dropna().unique()[:5], "..." if resultado['Producto'].nunique() > 5 else "")
+    
+    print(f"\nEstados únicos encontrados: {resultado['Estado Producto'].nunique()}")
+    print("Estados:", resultado['Estado Producto'].dropna().unique())
+    
+    print(f"\nTipos de Gasto únicos encontrados: {resultado['Tipo Gasto'].nunique()}")
+    print("Tipos de Gasto:", resultado['Tipo Gasto'].dropna().unique())
+    
+    # 7. GUARDAR RESULTADO
+    nombre_archivo_resultado = 'Base_Sap_TRX_Resultado.xlsx'
+    resultado.to_excel(nombre_archivo_resultado, index=False)
+    print(f"\n✅ Archivo resultado guardado como: {nombre_archivo_resultado}")
+    
+    # Mostrar muestra de los primeros registros
+    print("\nPrimeros 3 registros del resultado (columnas clave):")
+    columnas_muestra = ['Clase Coste', 'Centro coste', 'Producto', 'Estado Producto', 'Tipo Gasto']
+    columnas_disponibles = [col for col in columnas_muestra if col in resultado.columns]
+    print(resultado[columnas_disponibles].head(3).to_string(index=False))
+    
+    return resultado
+
+def verificar_cruces_perdidos(resultado, tipo_producto, tipo_gasto):
+    """
+    Función auxiliar para verificar qué registros no se pudieron cruzar
+    """
+    print("\n" + "="*50)
+    print("ANÁLISIS DE REGISTROS NO CRUZADOS")
+    print("="*50)
+    
+    # Verificar centros de costo no encontrados
+    centros_sin_producto = resultado[resultado['Producto'].isna()]['Centro coste'].unique()
+    if len(centros_sin_producto) > 0:
+        print(f"\nCentros de costo sin producto asignado ({len(centros_sin_producto)}):")
+        print(centros_sin_producto[:10])  # Mostrar solo los primeros 10
+        if len(centros_sin_producto) > 10:
+            print("...")
+    
+    # Verificar clases de costo no encontradas
+    clases_sin_tipo = resultado[resultado['Tipo Gasto'].isna()]['Clase Coste'].unique()
+    if len(clases_sin_tipo) > 0:
+        print(f"\nClases de costo sin tipo de gasto asignado ({len(clases_sin_tipo)}):")
+        print(clases_sin_tipo[:10])  # Mostrar solo las primeras 10
+        if len(clases_sin_tipo) > 10:
+            print("...")
+
+# EJECUTAR EL PROCESO
+if __name__ == "__main__":
+    try:
+        # Ejecutar el procesamiento principal
+        resultado = procesar_cruce_datos()
+        
+        # Opcional: ejecutar verificación de cruces perdidos
+        # (comentar si no se necesita)
+        # tipo_producto = pd.read_excel('Nombres NMC 2025.xlsx', sheet_name='Tipo Producto')
+        # tipo_gasto = pd.read_excel('Nombres NMC 2025.xlsx', sheet_name='Tipo Gasto')
+        # verificar_cruces_perdidos(resultado, tipo_producto, tipo_gasto)
+        
+        print("\n🎉 Proceso completado exitosamente!")
+        
+    except FileNotFoundError as e:
+        print(f"❌ Error: No se pudo encontrar el archivo: {e}")
+        print("Asegúrate de que los archivos 'Base Sap TRX.xlsx' y 'Nombres NMC 2025.xlsx' estén en el mismo directorio que este script.")
+        
+    except Exception as e:
+        print(f"❌ Error inesperado: {e}")
+        print("Revisa que los archivos tengan el formato correcto y las columnas esperadas.")
